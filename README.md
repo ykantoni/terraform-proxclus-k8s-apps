@@ -61,7 +61,7 @@ leave them alone):
 for side in primary standby; do
   kubectl -n postgres-$side create secret generic postgres-$side-credentials \
     --from-literal=POSTGRES_DB=app \
-    --from-literal=POSTGRES_USER=<user> \
+    --from-literal=POSTGRES_USER=pgadmin \
     --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"
 done
 ```
