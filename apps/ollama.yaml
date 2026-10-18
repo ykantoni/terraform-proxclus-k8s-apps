@@ -25,9 +25,6 @@ spec:
     - repoURL: https://github.com/ykantoni/terraform-proxclus-k8s-apps.git
       targetRevision: main
       ref: values
-    - repoURL: https://github.com/ykantoni/terraform-proxclus-k8s-apps.git
-      targetRevision: main
-      path: ollama/manifests
   syncPolicy:
     automated:
       prune: true

@@ -11,12 +11,11 @@ service:
   type: LoadBalancer
   port: 11434
 
-# Binds to the static "local" PV in manifests/storage.yaml, not Longhorn:
-# models are re-downloadable cache, so replication buys nothing.
+# No storageClass: the PVC gets the cluster's default StorageClass (longhorn),
+# dynamically provisioned.
 persistentVolume:
   enabled: true
   size: 20Gi
-  storageClass: ollama-local
 
 # Created by terraform-proxclus-k8s-infra's gpu-operator addon, which also
 # applies the nvidia.com/gpu.present label to GPU nodes.

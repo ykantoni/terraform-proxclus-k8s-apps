@@ -11,10 +11,7 @@ the `ollama` and `open-webui` ArgoCD Applications in `../apps/`.
 - `ollama-values.yaml` — the Ollama server with `ollama.gpu.type: nvidia`, a
   `nodeSelector` on `nvidia.com/gpu.present=true` and `runtimeClassName:
   nvidia`, so it only ever runs on a GPU node. A 20Gi `persistentVolume`
-  keeps pulled models across pod restarts.
-- `manifests/storage.yaml` — the `ollama-local` no-provisioner StorageClass
-  and a static `local` PV at `/var/lib/ollama-models` on the GPU node, used by
-  that PVC instead of Longhorn. See "Storage".
+  keeps pulled models across pod restarts. See "Storage".
 - `open-webui-values.yaml` — the chat UI, pointed at the Ollama release via
   `ollamaUrls` (its bundled Ollama subchart disabled), exposed as a
   `LoadBalancer`, with its own 2Gi Longhorn PVC for chat history and accounts.
@@ -39,17 +36,16 @@ names to `ollama.models.pull` to pre-seed a model at first boot instead.
 
 ## Storage
 
-Pulled models are re-downloadable cache, so Longhorn's 3x replication (which
-needs the full PVC size free on three nodes at once) and its engine overhead
-buy nothing here. Ollama's PVC instead binds to a `local` PV on the GPU node
-itself. Open WebUI's small PVC stays on `longhorn`, since chat history and
-accounts are worth replicating.
+Ollama's model PVC sets no `storageClass`, so it's dynamically provisioned
+from the cluster's default StorageClass (`longhorn`). Open WebUI's PVC is on
+`longhorn` too.
 
-Because the PV is static, `/var/lib/ollama-models` must already exist and be
-writable on the GPU node. On Talos it must also be exposed to the kubelet,
-which k8s-infra's `modules/talos-cluster/patches/ollama-models-mounts.patch.yaml`
-does for GPU nodes.
+Longhorn keeps 3 replicas by default, so a 20Gi PVC needs 20Gi free on three
+nodes at once. Raise `persistentVolume.size` for bigger models only as far as
+the nodes' `disk` in terraform-proxclus-vm-infra allows. Pin a different class
+(e.g. a single-replica Longhorn class, since models are re-downloadable) with
+`persistentVolume.storageClass`.
 
-To go back to Longhorn, set `persistentVolume.storageClass: longhorn` in
-`ollama-values.yaml` and delete `manifests/storage.yaml`, after raising the GPU
-node's `disk` in terraform-proxclus-vm-infra if needed.
+A PVC's StorageClass can't be changed in place: switching class on an
+existing PVC means deleting it (and its pulled models) and letting ArgoCD
+recreate it.

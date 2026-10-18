@@ -28,15 +28,14 @@ checkout, so local commits have no effect until pushed.
 
 | Application | Source | Namespace |
 | --- | --- | --- |
-| `ollama` | otwld/ollama chart + `ollama/ollama-values.yaml` + `ollama/manifests/` | `ollama` |
+| `ollama` | otwld/ollama chart + `ollama/ollama-values.yaml` | `ollama` |
 | `open-webui` | open-webui chart + `ollama/open-webui-values.yaml` | `ollama` |
 | `cnpg-operator` | cloudnative-pg chart | `cnpg-system` |
 | `postgres-cnpg` | `postgres-cnpg/manifests/` (a CNPG `Cluster`) | `postgres` |
 | `postgres` | `postgres/` (plain StatefulSets) | `postgres-primary`, `postgres-standby` |
 
 Chart-based apps are multi-source `Application`s: the upstream chart, plus
-this repo as `$values` for their values file, plus (for ollama) a plain
-manifests directory for the objects the chart doesn't make.
+this repo as `$values` for their values file.
 
 ## Secrets
 
