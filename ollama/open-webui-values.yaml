@@ -1,0 +1,21 @@
+# Use the ollama Application's release (with GPU scheduling) instead of the
+# chart's bundled Ollama subchart.
+ollama:
+  enabled: false
+
+ollamaUrls:
+  - http://ollama.ollama.svc.cluster.local:11434
+
+service:
+  type: LoadBalancer
+
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: longhorn
+
+# A single replica needs no Redis for websockets.
+websocket:
+  manager: ""
+  redis:
+    enabled: false

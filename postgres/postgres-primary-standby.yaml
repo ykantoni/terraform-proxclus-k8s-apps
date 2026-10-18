@@ -12,30 +12,11 @@ metadata:
   name: postgres-standby
 
 
-# 2. Credentials (generate a random password, or swap in your own)
----
-apiVersion: v1
-stringData:
-  POSTGRES_DB: app
-  POSTGRES_PASSWORD: OFIwSFUrZE
-  POSTGRES_USER: yurick
-kind: Secret
-metadata:
-  name: postgres-primary-credentials
-  namespace: postgres-primary
-type: Opaque
-
----
-apiVersion: v1
-stringData:
-  POSTGRES_DB: app
-  POSTGRES_PASSWORD: OFIwSFUrZE
-  POSTGRES_USER: yurick
-kind: Secret
-metadata:
-  name: postgres-standby-credentials
-  namespace: postgres-standby
-type: Opaque
+# 2. Credentials — deliberately NOT in this file. ArgoCD syncs it from a
+#    public repo, so the two Secrets the StatefulSets read
+#    (postgres-primary-credentials, postgres-standby-credentials; keys
+#    POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD) are created by hand once
+#    ArgoCD has created the namespaces. See README.md, "postgres".
 
 # 3. pg_hba.conf — declared here instead of hand-edited in the running pod,
 #    so it survives pod/PVC recreation and changes go through `kubectl apply`.

@@ -1,64 +1,78 @@
-# Apps
+# terraform-proxclus-k8s-apps
 
-Applications deployed onto the cluster that `terraform-proxclus-k8s-infra` builds, each as its own
-independent Terraform root. `postgres/` is the first and the reference
-example; more get added the same way as they show up.
+Applications for the Talos cluster built by
+[terraform-proxclus-k8s-infra](https://github.com/ykantoni/terraform-proxclus-k8s-infra),
+deployed and kept in sync by **ArgoCD**. Nothing here is applied by hand or by
+Terraform: ArgoCD watches this repo's `main` branch and reconciles the cluster
+to it.
 
-## The convention
+## How it's wired
 
-Every app under here is a **separate Terraform root**, not a module —
-Terraform can't parameterize root-only concerns like `backend` or `provider`
-blocks through a `module` call, so there's no way to make this DRY without
-giving up the isolation it exists for. Copy `postgres/`'s shape for a new
-one:
+k8s-infra's ArgoCD addon creates one root `Application` (app-of-apps) pointed
+at `apps/` in this repo. Every file in `apps/` is itself an `Application`, so:
 
-- **Directory**: `<name>/`
-- **State**: its own `backend "local" { path = "/home/yurick/terraform/state/<name>.tfstate" }`
-  in `versions.tf` — never the platform's `terraform.tfstate`, never another
-  app's
-- **Providers**: `helm`/`kubernetes` (or whatever the app needs), configured
-  from a `kubeconfig_path` variable — an absolute path, defaulting to
-  `/home/yurick/terraform/talos-proxmox/terraform-proxclus-k8s-infra/.kube/config` — never from a
-  reference into the platform's state or outputs
-- **A dedicated namespace**, named after the app, created by the app's own
-  `main.tf`. Beyond keeping Kubernetes objects tidy, it makes the blast
-  radius visible from `kubectl` too, not just from Terraform state.
-- **Its own `Justfile`** (`apply`/`destroy`/`fmt`) and **`README.md`**
-  documenting what it deploys and repeating this independence contract, so
-  each app is fully understandable without reading `postgres/`'s docs first.
+- **Add an app**: add `apps/<name>.yaml` (plus its values/manifests under
+  `<name>/`), push to `main`.
+- **Change an app**: edit its values or manifests, push to `main`.
+- **Remove an app**: delete `apps/<name>.yaml`, push. Prune is on and every
+  child `Application` carries ArgoCD's resources finalizer, so its workloads
+  are deleted too — including PVCs.
 
-Directory name, state file name, and primary namespace name should all match
-the app name — that's what makes "which state owns what" traceable at a
-glance instead of something you have to go read code to answer.
+All apps sync automatically with prune and self-heal: changes made with
+`kubectl` drift-revert within minutes. Change things through Git.
 
-## What this guarantees, and what it doesn't
+**Nothing pushed, nothing deployed.** ArgoCD reads GitHub, not a local
+checkout, so local commits have no effect until pushed.
 
-**Guaranteed, by the state separation:** `terraform destroy` inside
-`<name>/` can only touch resources recorded in `<name>.tfstate`. It
-cannot reach the platform's VMs or Talos configuration — those live in a
-state file this directory never references — and it cannot reach another
-app's resources for the same reason. This is enforced by convention (no app
-here should ever have a `module` block pointing at `terraform-proxclus-k8s-infra/modules/*` or at a
-sibling app) rather than by tooling, so it's a rule to hold the line on when
-adding new apps, not something Terraform stops you from breaking.
+## Layout
 
-**Not guaranteed:** runtime isolation between apps. Kubernetes does not wall
-namespaces off from each other by default — no NetworkPolicy, no RBAC
-boundary, no resource quota, unless something adds one. Every app here also
-shares the same underlying node CPU/RAM/disk and the same default
-StorageClass, so a noisy or storage-hungry app is a real risk to its
-neighbors even though its Terraform state is fully separate from theirs. If
-that matters for a given app (say, something that shouldn't be reachable
-from Postgres), that's a deliberate addition to make in that app's own
-config — a `CiliumNetworkPolicy`, a `ResourceQuota` — not something this
-directory structure hands you for free.
+| Application | Source | Namespace |
+| --- | --- | --- |
+| `ollama` | otwld/ollama chart + `ollama/ollama-values.yaml` + `ollama/manifests/` | `ollama` |
+| `open-webui` | open-webui chart + `ollama/open-webui-values.yaml` | `ollama` |
+| `cnpg-operator` | cloudnative-pg chart | `cnpg-system` |
+| `postgres-cnpg` | `postgres-cnpg/manifests/` (a CNPG `Cluster`) | `postgres` |
+| `postgres` | `postgres/` (plain StatefulSets) | `postgres-primary`, `postgres-standby` |
+
+Chart-based apps are multi-source `Application`s: the upstream chart, plus
+this repo as `$values` for their values file, plus (for ollama) a plain
+manifests directory for the objects the chart doesn't make.
+
+## Secrets
+
+This repo is **public**. No credentials go in it. CNPG generates its own
+Secrets in-cluster; the plain `postgres` app reads two Secrets you create by
+hand (see `postgres` below). The local `postgres/.env.*` files are gitignored.
+
+## Status
+
+```bash
+kubectl -n argocd get applications
+argocd app list            # after argocd login <argocd-server IP> --insecure
+```
+
+## postgres
+
+ArgoCD creates the `postgres-primary`/`postgres-standby` namespaces, but its
+StatefulSets stay in `CreateContainerConfigError` until their credential
+Secrets exist. Create them once (untracked by ArgoCD, so prune and self-heal
+leave them alone):
+
+```bash
+for side in primary standby; do
+  kubectl -n postgres-$side create secret generic postgres-$side-credentials \
+    --from-literal=POSTGRES_DB=app \
+    --from-literal=POSTGRES_USER=<user> \
+    --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)"
+done
+```
+
+Use the same user and password on both sides if the standby replicates from
+the primary with them.
 
 ## Platform dependency
 
-Every app here has a runtime dependency on the platform being up — the
-cluster at `kubeconfig_path` has to exist and answer, and most will lean on
-the default StorageClass Longhorn provides (`terraform-proxclus-k8s-infra/modules/addons/longhorn`).
-None of that is a Terraform dependency: nothing here is wired into
-`terraform-proxclus-k8s-infra/addons.tf` or gated on the platform's apply, so an app can be created or torn
-down at any time without touching, or being blocked by, the platform's own
-lifecycle.
+Every app depends on the platform at runtime only: the `longhorn` default
+StorageClass, Cilium's LoadBalancer pool, and (for ollama) the GPU Operator's
+`nvidia` RuntimeClass and `nvidia.com/gpu.present` node label. Nothing here
+references k8s-infra's Terraform state.

@@ -1,0 +1,34 @@
+# "local" volumes have no dynamic provisioner, so the PV is static. The
+# directory must already exist on the GPU node; terraform-proxclus-k8s-infra's
+# ollama-models-mounts patch exposes it to the kubelet on Talos.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ollama-local
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+# Bind only once the pod is scheduled, so the PV's node affinity is honoured.
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ollama-models
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ollama-local
+  local:
+    path: /var/lib/ollama-models
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: nvidia.com/gpu.present
+              operator: In
+              values:
+                - "true"

@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ollama
+  namespace: argocd
+  # Deleting this Application (e.g. removing this file with prune on) also
+  # deletes what it deployed, instead of orphaning it.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ollama
+  sources:
+    - repoURL: https://otwld.github.io/ollama-helm/
+      chart: ollama
+      targetRevision: 1.77.0
+      helm:
+        # Release name == chart name collapses the chart's fullname to plain
+        # "ollama", the Service name open-webui-values.yaml points at.
+        releaseName: ollama
+        valueFiles:
+          - $values/ollama/ollama-values.yaml
+    - repoURL: https://github.com/ykantoni/terraform-proxclus-k8s-apps.git
+      targetRevision: main
+      ref: values
+    - repoURL: https://github.com/ykantoni/terraform-proxclus-k8s-apps.git
+      targetRevision: main
+      path: ollama/manifests
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

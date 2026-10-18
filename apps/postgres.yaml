@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  # Every object in postgres/ sets its own namespace (postgres-primary or
+  # postgres-standby) and the manifest creates both namespaces itself.
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: postgres-primary
+  source:
+    repoURL: https://github.com/ykantoni/terraform-proxclus-k8s-apps.git
+    targetRevision: main
+    path: postgres
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

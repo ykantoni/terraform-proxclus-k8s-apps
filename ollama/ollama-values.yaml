@@ -1,0 +1,25 @@
+ollama:
+  gpu:
+    enabled: true
+    type: nvidia
+    number: 1
+  # Empty: pick models from Open WebUI's model manager after deploying.
+  models:
+    pull: []
+
+service:
+  type: LoadBalancer
+  port: 11434
+
+# Binds to the static "local" PV in manifests/storage.yaml, not Longhorn:
+# models are re-downloadable cache, so replication buys nothing.
+persistentVolume:
+  enabled: true
+  size: 20Gi
+  storageClass: ollama-local
+
+# Created by terraform-proxclus-k8s-infra's gpu-operator addon, which also
+# applies the nvidia.com/gpu.present label to GPU nodes.
+runtimeClassName: nvidia
+nodeSelector:
+  nvidia.com/gpu.present: "true"
